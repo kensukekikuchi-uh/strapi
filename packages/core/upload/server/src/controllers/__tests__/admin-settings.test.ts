@@ -23,16 +23,23 @@ const buildContext = (): Partial<Context> => ({
   forbidden: jest.fn(),
 });
 
-describe('Admin Settings Controller - getSettings concurrentUploadRequests echo', () => {
+const mockHasProvider = jest.fn();
+
+describe('Admin Settings Controller - getSettings read-only echoes', () => {
   let configuredConcurrency: number | undefined;
 
   beforeEach(() => {
     jest.clearAllMocks();
     configuredConcurrency = undefined;
+    mockHasProvider.mockReturnValue(false);
 
-    mockGetService.mockReturnValue({
-      getSettings: jest.fn().mockResolvedValue(STORED_SETTINGS),
-    } as never);
+    mockGetService.mockImplementation((name) => {
+      if (name === 'aiMetadataProvider') {
+        return { hasProvider: mockHasProvider } as never;
+      }
+
+      return { getSettings: jest.fn().mockResolvedValue(STORED_SETTINGS) } as never;
+    });
 
     global.strapi = {
       config: {
@@ -48,7 +55,7 @@ describe('Admin Settings Controller - getSettings concurrentUploadRequests echo'
     await adminSettingsController.getSettings(ctx as Context);
 
     expect(ctx.body).toEqual({
-      data: { ...STORED_SETTINGS, concurrentUploadRequests: 5 },
+      data: { ...STORED_SETTINGS, concurrentUploadRequests: 5, aiMetadataAvailable: false },
     });
   });
 
@@ -58,7 +65,18 @@ describe('Admin Settings Controller - getSettings concurrentUploadRequests echo'
     await adminSettingsController.getSettings(ctx as Context);
 
     expect(ctx.body).toEqual({
-      data: { ...STORED_SETTINGS, concurrentUploadRequests: 1 },
+      data: { ...STORED_SETTINGS, concurrentUploadRequests: 1, aiMetadataAvailable: false },
+    });
+  });
+
+  test('echoes whether an AI metadata provider is registered', async () => {
+    mockHasProvider.mockReturnValue(true);
+    const ctx = buildContext();
+
+    await adminSettingsController.getSettings(ctx as Context);
+
+    expect(ctx.body).toEqual({
+      data: { ...STORED_SETTINGS, concurrentUploadRequests: 1, aiMetadataAvailable: true },
     });
   });
 });
